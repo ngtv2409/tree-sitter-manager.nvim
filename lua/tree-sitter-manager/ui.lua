@@ -14,25 +14,13 @@ local footer = " [i] Install  [x] Remove  [u] Update  [r] Refresh  [q] Close "
 local M = {}
 
 local function get_status_icon(lang)
-    if installer.is_only_query(lang) then
-        if not vim.uv.fs_stat(util.qpath(lang)) then
-            return glyph_fail[glyph_index]
-        end
-    else
-        if not vim.uv.fs_stat(util.ppath(lang)) then
-            return glyph_fail[glyph_index]
-        end
+    if not util.is_installed(lang) then
+        return glyph_fail[glyph_index]
     end
 
-    for _, dep in ipairs(installer.get_requires(lang)) do
-        if installer.is_only_query(dep) then
-            if not vim.uv.fs_stat(util.qpath(dep)) then
-                return glyph_warn[glyph_index]
-            end
-        else
-            if not vim.uv.fs_stat(util.ppath(dep)) then
-                return glyph_warn[glyph_index]
-            end
+    for _, dep in ipairs(util.get_requires(lang)) do
+        if not util.is_installed(dep) then
+            return glyph_warn[glyph_index]
         end
     end
 
@@ -40,12 +28,12 @@ local function get_status_icon(lang)
 end
 
 local function get_meta_suffix(lang)
-    local info = installer.get_repo_info(lang)
+    local info = util.get_repo_info(lang)
     local parts = {}
     if info and info.revision then
         table.insert(parts, string.sub(info.revision, 1, 7))
     end
-    local reqs = installer.get_requires(lang)
+    local reqs = util.get_requires(lang)
     if #reqs > 0 then
         table.insert(parts, "requires:" .. table.concat(reqs, ","))
     end
