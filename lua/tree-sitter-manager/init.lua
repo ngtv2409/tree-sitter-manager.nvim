@@ -20,6 +20,12 @@ local function get_filetypes(filter)
         :totable()
 end
 
+local function iter_startswith(_argLead)
+    return vim.iter(state.languages):filter(function(lang)
+        return vim.startswith(lang, _argLead)
+    end)
+end
+
 function M.setup(opts)
     state.cfg = vim.tbl_deep_extend("force", state.cfg, opts or {})
 
@@ -108,7 +114,11 @@ function M.setup(opts)
         nargs = "+",
         bar = true,
         complete = function(_argLead, _cmdLine, _cursorPos)
-            return state.languages
+            return iter_startswith(_argLead)
+                :filter(function(lang)
+                    return not util.is_installed(lang)
+                end)
+                :totable()
         end,
         desc = "Install treesitter parsers",
     })
@@ -121,9 +131,27 @@ function M.setup(opts)
         nargs = "+",
         bar = true,
         complete = function(_argLead, _cmdLine, _cursorPos)
-            return state.languages
+            return iter_startswith(_argLead)
+                :filter(function(lang)
+                    return util.is_installed(lang)
+                end)
+                :totable()
         end,
         desc = "Remove treesitter parsers",
+    })
+
+    vim.api.nvim_create_user_command("TSUpdate", function(args)
+        for _, lang in ipairs(args.fargs) do
+            installer.remove(lang)
+            installer.install_new(lang, true)
+        end
+    end, {
+        nargs = "+",
+        bar = true,
+        complete = function(_argLead, _cmdLine, _cursorPos)
+            return iter_startswith(_argLead):totable()
+        end,
+        desc = "Update treesitter parsers",
     })
 end
 
