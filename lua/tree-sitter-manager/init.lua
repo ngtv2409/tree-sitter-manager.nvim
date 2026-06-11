@@ -1,14 +1,10 @@
-local M = {}
-
 local state = require("tree-sitter-manager.config")
 local util = require("tree-sitter-manager.util")
 local installer = require("tree-sitter-manager.installer")
 local ui = require("tree-sitter-manager.ui")
 
 -- Preserve public API surface for backward compatibility
-M._install_single = installer._install_single
-M.open = ui.open
-M._act = ui._act
+local M = require("tree-sitter-manager.backport")
 
 local function get_filetypes(filter)
     return vim.iter(state.languages)
@@ -34,7 +30,11 @@ function M.setup(opts)
 
     -- Merge built-in repos with user-defined language overrides.
     -- User entries take precedence, allowing custom forks and new languages.
-    state.effective_repos = vim.tbl_deep_extend("force", vim.deepcopy(state.base_repos), state.cfg.languages)
+    state.effective_repos = vim.deepcopy(state.base_repos)
+    vim.iter(state.cfg.languages):fold(state.effective_repos, function(repos, lang, info)
+        repos[lang] = vim.tbl_extend("force", repos[lang], info)
+        return repos
+    end)
     state.languages = vim.tbl_keys(state.effective_repos)
     table.sort(state.languages)
 
@@ -66,9 +66,7 @@ function M.setup(opts)
     else
         ensure_list = ensure_list or {}
     end
-    for _, lang in ipairs(ensure_list) do
-        installer.install(lang)
-    end
+    installer.install(ensure_list)
 
     if state.cfg.auto_install then
         local filetypes = get_filetypes(function(lang)
@@ -107,9 +105,7 @@ function M.setup(opts)
     end, { nargs = 0, desc = "Open Tree-sitter Parsers Manager" })
 
     vim.api.nvim_create_user_command("TSInstall", function(args)
-        for _, lang in ipairs(args.fargs) do
-            installer.install(lang)
-        end
+        installer.install(args.fargs)
     end, {
         nargs = "+",
         bar = true,
@@ -141,10 +137,8 @@ function M.setup(opts)
     })
 
     vim.api.nvim_create_user_command("TSUpdate", function(args)
-        for _, lang in ipairs(args.fargs) do
-            installer.remove(lang)
-            installer.install(lang)
-        end
+        installer.remove(args.fargs)
+        installer.install(args.fargs)
     end, {
         nargs = "+",
         bar = true,
