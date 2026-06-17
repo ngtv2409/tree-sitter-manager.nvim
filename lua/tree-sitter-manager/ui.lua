@@ -9,7 +9,65 @@ local glyph_fail = { "..", "❌" }
 local glyph_index = 2
 
 local title = "Tree-sitter Parser Manager"
-local footer = " [i] Install  [x] Remove  [u] Update  [r] Refresh  [q] Close "
+local footer = " [i] Install  [x] Remove  [u] Update  [r] Refresh  [f] Filter  [q] Close "
+
+local function get_status(lang)
+    if not util.is_installed(lang) then
+        return "fail"
+    end
+
+    for _, dep in ipairs(util.get_requires(lang)) do
+        if not util.is_installed(dep) then
+            return "warn"
+        end
+    end
+
+    return "ok"
+end
+
+-- Only show these status
+-- Maybe add configureable default
+local filter_d = {
+    ok = true,
+    warn = true,
+    fail = true,
+}
+local filter = filter_d
+-- Input: comma seperated list
+local function ask_status_filter()
+    local input = vim.fn.input("Filter (ok,warn,fail) or empty for default. Comma seperated\n: ")
+
+    if not input or input == "" then
+        return vim.deepcopy(filter_d)
+    end
+
+    local filter = {
+        ok = false,
+        warn = false,
+        fail = false,
+    }
+
+    for part in input:gmatch("[^,]+") do
+        local v = part:lower():gsub("%s+", "")
+        if filter[v] ~= nil then
+            filter[v] = true
+        end
+    end
+
+    return filter
+end
+local function get_lang_filtered()
+    local langs = config.languages
+    local filtered = {}
+
+    for i = 1, #langs do
+        local v = langs[i]
+        if filter[get_status(v)] then
+            filtered[#filtered + 1] = v
+        end
+    end
+    return filtered
+end
 
 local M = {}
 
@@ -42,7 +100,7 @@ end
 
 function M.render(buf)
     local lines = {}
-    for _, l in ipairs(config.languages) do
+    for _, l in ipairs(get_lang_filtered()) do
         table.insert(lines, string.format("   %-18s  %s%s", l, get_status_icon(l), get_meta_suffix(l)))
     end
 
@@ -93,6 +151,10 @@ function M.open()
     end, { buffer = buf, noremap = true, silent = true })
     vim.keymap.set("n", "u", function()
         M._act("update")
+    end, { buffer = buf, noremap = true, silent = true })
+    vim.keymap.set("n", "f", function()
+        filter = ask_status_filter()
+        M.render(buf)
     end, { buffer = buf, noremap = true, silent = true })
 end
 
