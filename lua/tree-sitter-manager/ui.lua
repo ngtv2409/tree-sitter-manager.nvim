@@ -87,7 +87,13 @@ end
 
 function M.render(buf)
     local lines = {}
-    for _, l in ipairs(get_lang_filtered(config.languages, filter_idx)) do
+    local langs = get_lang_filtered(config.languages, filter_idx)
+    -- cycle filter to skip empty
+    while #langs == 0 do
+        filter_idx = cycle_filter(filter_idx)
+        langs = get_lang_filtered(config.languages, filter_idx)
+    end
+    for _, l in ipairs(langs) do
         table.insert(lines, string.format("   %-18s  %s%s", l, get_status_icon(l), get_meta_suffix(l)))
     end
 
