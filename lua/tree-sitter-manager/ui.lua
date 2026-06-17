@@ -110,6 +110,7 @@ function M.render(buf)
 end
 
 function M.open()
+    filter = vim.deepcopy(filter_d)
     local max_w = #footer
     for _, l in ipairs(config.languages) do
         max_w = math.max(max_w, #("   " .. l .. "  XX  abc1234  requires:x,y"))
