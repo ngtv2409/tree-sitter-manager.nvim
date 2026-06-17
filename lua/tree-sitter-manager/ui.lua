@@ -11,12 +11,15 @@ local glyph_index = 2
 local title = "Tree-sitter Parser Manager"
 local footer = " [i] Install  [x] Remove  [u] Update  [r] Refresh  [f] Filter  [q] Close "
 
--- use ints for easy cycle
 local filter_enum = {
-    all = 0,
-    ok = 1,
-    warn = 2,
-    fail = 3
+    all = 0, ok = 1, warn = 2, fail = 3
+}
+local filter_type =  {
+    --     ok,   warn, fail
+    [0] = {true, true, true},  -- all
+    [1] = {true, true, false}, -- installed
+    [2] = {false, true, false},-- warning
+    [3] = {false, false, true} -- missing
 }
 local function get_filter_status(lang)
     if not util.is_installed(lang) then
@@ -32,20 +35,21 @@ local function get_filter_status(lang)
     return filter_enum.ok
 end
 
-local filter = filter_enum.all
-local function cycle_filter(filter)
-    return ( (filter + 1) % 4 )
+local filter_idx = 0
+local function cycle_filter(filter_idx)
+    return ( (filter_idx + 1) % (4) )
 end
 
-local function get_lang_filtered(langs, filter)
+local function get_lang_filtered(langs, filter_idx)
     local filtered = {}
-    if filter == filter_enum.all then
+    -- all
+    if filter_idx == 0 then
         return langs
     end
 
     for i = 1, #langs do
         local v = langs[i]
-        if get_filter_status(v) == filter then
+        if filter_type[filter_idx][get_filter_status(v)] then
             filtered[#filtered + 1] = v
         end
     end
@@ -83,7 +87,7 @@ end
 
 function M.render(buf)
     local lines = {}
-    for _, l in ipairs(get_lang_filtered(config.languages, filter)) do
+    for _, l in ipairs(get_lang_filtered(config.languages, filter_idx)) do
         table.insert(lines, string.format("   %-18s  %s%s", l, get_status_icon(l), get_meta_suffix(l)))
     end
 
@@ -93,7 +97,7 @@ function M.render(buf)
 end
 
 function M.open()
-    filter = filter_enum.all
+    filter_idx = 0
     local max_w = #footer
     for _, l in ipairs(config.languages) do
         max_w = math.max(max_w, #("   " .. l .. "  XX  abc1234  requires:x,y"))
@@ -137,7 +141,7 @@ function M.open()
         M._act("update")
     end, { buffer = buf, noremap = true, silent = true })
     vim.keymap.set("n", "f", function()
-        filter = cycle_filter(filter)
+        filter_idx = cycle_filter(filter_idx)
         M.render(buf)
     end, { buffer = buf, noremap = true, silent = true })
 end
