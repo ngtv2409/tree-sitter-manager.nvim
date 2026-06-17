@@ -11,58 +11,41 @@ local glyph_index = 2
 local title = "Tree-sitter Parser Manager"
 local footer = " [i] Install  [x] Remove  [u] Update  [r] Refresh  [f] Filter  [q] Close "
 
-local function get_status(lang)
+-- use ints for easy cycle
+local filter_enum = {
+    all = 0,
+    ok = 1,
+    warn = 2,
+    fail = 3
+}
+local function get_filter_status(lang)
     if not util.is_installed(lang) then
-        return "fail"
+        return filter_enum.fail
     end
 
     for _, dep in ipairs(util.get_requires(lang)) do
         if not util.is_installed(dep) then
-            return "warn"
+            return filter_enum.warn
         end
     end
 
-    return "ok"
+    return filter_enum.ok
 end
 
--- Only show these status
--- Maybe add configureable default
-local filter_d = {
-    ok = true,
-    warn = true,
-    fail = true,
-}
-local filter = filter_d
--- Input: comma seperated list
-local function ask_status_filter()
-    local input = vim.fn.input("Filter (ok,warn,fail) or empty for default. Comma seperated\n: ")
-
-    if not input or input == "" then
-        return vim.deepcopy(filter_d)
-    end
-
-    local filter = {
-        ok = false,
-        warn = false,
-        fail = false,
-    }
-
-    for part in input:gmatch("[^,]+") do
-        local v = part:lower():gsub("%s+", "")
-        if filter[v] ~= nil then
-            filter[v] = true
-        end
-    end
-
-    return filter
+local filter = filter_enum.all
+local function cycle_filter(filter)
+    return ( (filter + 1) % 4 )
 end
-local function get_lang_filtered()
-    local langs = config.languages
+
+local function get_lang_filtered(langs, filter)
     local filtered = {}
+    if filter == filter_enum.all then
+        return langs
+    end
 
     for i = 1, #langs do
         local v = langs[i]
-        if filter[get_status(v)] then
+        if get_filter_status(v) == filter then
             filtered[#filtered + 1] = v
         end
     end
@@ -100,7 +83,7 @@ end
 
 function M.render(buf)
     local lines = {}
-    for _, l in ipairs(get_lang_filtered()) do
+    for _, l in ipairs(get_lang_filtered(config.languages, filter)) do
         table.insert(lines, string.format("   %-18s  %s%s", l, get_status_icon(l), get_meta_suffix(l)))
     end
 
@@ -110,7 +93,7 @@ function M.render(buf)
 end
 
 function M.open()
-    filter = vim.deepcopy(filter_d)
+    filter = filter_enum.all
     local max_w = #footer
     for _, l in ipairs(config.languages) do
         max_w = math.max(max_w, #("   " .. l .. "  XX  abc1234  requires:x,y"))
@@ -154,7 +137,7 @@ function M.open()
         M._act("update")
     end, { buffer = buf, noremap = true, silent = true })
     vim.keymap.set("n", "f", function()
-        filter = ask_status_filter()
+        filter = cycle_filter(filter)
         M.render(buf)
     end, { buffer = buf, noremap = true, silent = true })
 end
