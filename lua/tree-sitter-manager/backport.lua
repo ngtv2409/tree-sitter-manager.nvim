@@ -8,7 +8,6 @@ local M = {
         end, true, true)
     end,
     open = ui.open,
-    _act = ui._act,
 }
 
 return M

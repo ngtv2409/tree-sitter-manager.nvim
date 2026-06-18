@@ -100,11 +100,11 @@ function M.setup(opts)
     end
 
     vim.api.nvim_create_user_command("TSManager", function()
-        M.open()
+        ui.open()
     end, { nargs = 0, desc = "Open Tree-sitter Parsers Manager" })
 
     vim.api.nvim_create_user_command("TSInstall", function(args)
-        installer.install(args.fargs)
+        installer.install(args.fargs, ui.render_update)
     end, {
         nargs = "+",
         bar = true,
@@ -119,9 +119,8 @@ function M.setup(opts)
     })
 
     vim.api.nvim_create_user_command("TSUninstall", function(args)
-        for _, lang in ipairs(args.fargs) do
-            installer.remove(lang)
-        end
+        installer.remove(args.fargs)
+        ui.render_update()
     end, {
         nargs = "+",
         bar = true,
@@ -137,7 +136,8 @@ function M.setup(opts)
 
     vim.api.nvim_create_user_command("TSUpdate", function(args)
         installer.remove(args.fargs)
-        installer.install(args.fargs)
+        ui.render_update()
+        installer.install(args.fargs, ui.render_update)
     end, {
         nargs = "+",
         bar = true,
