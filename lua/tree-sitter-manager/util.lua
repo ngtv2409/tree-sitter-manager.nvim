@@ -62,6 +62,12 @@ function M.is_installed(lang)
     end
 end
 
+---@vararg table  Non of the tables are mutated.
+---@return table  Concatenation of list-like tables.
+function M.concat(...)
+    return vim.iter({ ... }):flatten():totable()
+end
+
 function M.run(args, cwd)
     local out = vim.system(args, { text = true, cwd = cwd }):wait()
     local err = table.concat(args, " ") .. "\n" .. (out.stderr or "")
