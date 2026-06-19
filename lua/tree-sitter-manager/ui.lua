@@ -85,7 +85,7 @@ function M.refresh()
 end
 
 function M.render_update(out)
-    if out and not out.ok then
+    if not buf or out and not out.ok then
         return
     end
     local old_langs = langs
