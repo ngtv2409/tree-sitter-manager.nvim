@@ -6,13 +6,7 @@ local T = MiniTest.new_set({
             child:cleanup()
         end,
     },
-    parametrize = vim.iter(languages):fold({}, function(acc, lang)
-        table.insert(acc, { lang, lang })
-        for _, ft in ipairs(filetypes[lang] or {}) do
-            table.insert(acc, { lang, ft })
-        end
-        return acc
-    end),
+    parametrize = parametrize(vim.iter(languages):map(vim.treesitter.language.get_filetypes):flatten():totable()),
 })
 
 T["noauto_install"] = MiniTest.new_set({
@@ -22,9 +16,10 @@ T["noauto_install"] = MiniTest.new_set({
         end,
     },
 })
-T["noauto_install"]["works"] = function(lang, ft)
+T["noauto_install"]["works"] = function(ft)
     child.cmd("se ft=" .. ft)
     er(function()
+        local lang = vim.treesitter.language.get_lang(ft)
         child:wait(lang)
     end, "installation not started")
 end
@@ -36,8 +31,9 @@ T["auto_install"] = MiniTest.new_set({
         end,
     },
 })
-T["auto_install"]["works"] = function(lang, ft)
+T["auto_install"]["works"] = function(ft)
     child.cmd("se ft=" .. ft)
+    local lang = vim.treesitter.language.get_lang(ft)
     child:wait(lang)
     child:works(lang)
 end

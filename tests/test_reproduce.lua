@@ -6,11 +6,7 @@ local T = MiniTest.new_set({
             child:cleanup()
         end,
     },
-    parametrize = vim.iter(languages)
-        :map(function(lang)
-            return { lang }
-        end)
-        :totable(),
+    parametrize = parametrize(languages),
 })
 
 T["crash"] = function(lang)

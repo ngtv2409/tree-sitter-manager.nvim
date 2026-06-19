@@ -1,5 +1,4 @@
 local repos = require("tree-sitter-manager.repos")
-local filetypes = require("tree-sitter-manager.filetypes")
 
 local M = {}
 local datapath = vim.fn.stdpath("data")
@@ -47,6 +46,5 @@ M.cfg = {
 M.base_repos = repos
 M.effective_repos = repos
 M.languages = vim.tbl_keys(repos)
-M.filetypes = filetypes
 
 return M

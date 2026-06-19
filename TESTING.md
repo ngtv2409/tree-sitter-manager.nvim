@@ -44,6 +44,12 @@ This is necessary to test asynchronous functions (See [mini.nvim#1930](https://g
 - `installer`: `require("tree-sitter-manager.installer")`
 - etc.
 
+### Global Functions
+- `parametrize(list)`: nest every item into a singleton, i.e. does the following:
+  ```lua
+  iter:map(function(x) return { x } end):totable()
+  ```
+
 ### Example
 Create a file `tests/test_install.lua`:
 ```lua

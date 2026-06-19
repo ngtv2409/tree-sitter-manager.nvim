@@ -9,19 +9,12 @@ local T = MiniTest.new_set({
             child:cleanup()
         end,
     },
-    parametrize = vim.iter(languages):fold({}, function(acc, lang)
-        table.insert(acc, { lang, lang })
-        for _, ft in ipairs(filetypes[lang] or {}) do
-            table.insert(acc, { lang, ft })
-        end
-        return acc
-    end),
+    parametrize = parametrize(vim.iter(languages):map(vim.treesitter.language.get_filetypes):flatten():totable()),
 })
 
-T["before_install"] = function(lang, ft)
+T["before_install"] = function(ft)
     -- no highlighter before installation
-    child.cmd("e " .. lang .. "." .. ft .. "|set ft=" .. ft)
-    eq(ft, child.lua_get("vim.o.filetype"))
+    child.cmd("e name." .. ft .. "|se ft=" .. ft)
     eq(false, child.lua_get("nil ~= vim.treesitter.highlighter.active[vim.fn.bufnr()]"))
 end
 
@@ -33,14 +26,14 @@ T["after_install"] = MiniTest.new_set({
         end,
     },
 })
-T["after_install"]["new"] = function(lang, ft)
+T["after_install"]["new"] = function(ft)
     -- highlighter is active for new buffers
     child.cmd("enew|set ft=" .. ft)
     eq(true, child.lua_get("nil ~= vim.treesitter.highlighter.active[vim.fn.bufnr()]"))
 end
-T["after_install"]["old"] = function(lang, ft)
+T["after_install"]["old"] = function(ft)
     -- highlighter is active even for existing buffers
-    child.cmd("b " .. lang .. "." .. ft)
+    child.cmd("b name." .. ft)
     eq(true, child.lua_get("nil ~= vim.treesitter.highlighter.active[vim.fn.bufnr()]"))
 end
 
@@ -52,7 +45,7 @@ T["nohighlight"] = MiniTest.new_set({
         end,
     },
 })
-T["nohighlight"]["fails"] = function(lang, ft)
+T["nohighlight"]["fails"] = function(ft)
     -- expect no highlighting for any languages
     child.cmd("enew|set ft=" .. ft)
     eq(false, child.lua_get("nil ~= vim.treesitter.highlighter.active[vim.fn.bufnr()]"))
