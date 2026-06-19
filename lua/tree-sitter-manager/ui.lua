@@ -2,7 +2,7 @@ local config = require("tree-sitter-manager.config")
 local util = require("tree-sitter-manager.util")
 local installer = require("tree-sitter-manager.installer")
 
-local buf = vim.api.nvim_create_buf(false, true)
+local buf
 local filter_type = {
     --      ok    warn  miss
     [0] = { true, true, true }, --   all
@@ -96,6 +96,7 @@ end
 
 function M.open()
     icon_index = config.cfg.nerdfont and 2 or 1
+    buf = buf or vim.api.nvim_create_buf(false, true)
     M.refresh()
 
     local w = math.max(#footer + 4, maxline + 4, 40)
