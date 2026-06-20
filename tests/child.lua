@@ -34,13 +34,12 @@ function M:wait(languages, timeout)
     end
     timeout = timeout or 60000
     self.lua([[
-    status = installer.status
     languages = ]] .. vim.inspect(languages) .. [[
     success, reason = vim.wait(
         ]] .. timeout .. [[,
         function()
             languages = vim.tbl_filter(function(lang)
-                return status[lang] and status[lang].installing
+                return installer.installing[lang]
             end, languages)
             return #languages == 0
         end,
@@ -50,7 +49,7 @@ function M:wait(languages, timeout)
     local success = self.lua_get("success")
     local reason = self.lua_get("reason")
     local langs = self.lua_get("languages")
-    local status = self.lua_get("status")
+    local status = self.lua_get("installer.status")
     if not success then
         if -1 == reason then
             reason = "timeout"

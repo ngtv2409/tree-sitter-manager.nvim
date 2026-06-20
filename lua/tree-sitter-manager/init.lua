@@ -104,9 +104,7 @@ function M.setup(opts)
     })
 
     vim.api.nvim_create_user_command("TSUninstall", function(args)
-        for _, lang in ipairs(args.fargs) do
-            installer.remove(lang)
-        end
+        installer.remove(args.fargs)
     end, {
         nargs = "+",
         bar = true,
@@ -121,8 +119,7 @@ function M.setup(opts)
     })
 
     vim.api.nvim_create_user_command("TSUpdate", function(args)
-        installer.remove(args.fargs)
-        installer.install(args.fargs)
+        installer.update(args.fargs)
     end, {
         nargs = "+",
         bar = true,
