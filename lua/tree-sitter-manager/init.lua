@@ -31,6 +31,8 @@ function M.setup(opts)
     state.languages = vim.tbl_keys(state.effective_repos)
     table.sort(state.languages)
 
+    ui.setup()
+
     vim.fn.mkdir(state.cfg.parser_dir, "p")
     vim.fn.mkdir(state.cfg.query_dir, "p")
 
@@ -85,11 +87,11 @@ function M.setup(opts)
     end
 
     vim.api.nvim_create_user_command("TSManager", function()
-        M.open()
+        ui.open()
     end, { nargs = 0, desc = "Open Tree-sitter Parsers Manager" })
 
     vim.api.nvim_create_user_command("TSInstall", function(args)
-        installer.install(args.fargs)
+        installer.install(args.fargs, ui.render)
     end, {
         nargs = "+",
         bar = true,
@@ -104,7 +106,7 @@ function M.setup(opts)
     })
 
     vim.api.nvim_create_user_command("TSUninstall", function(args)
-        installer.remove(args.fargs)
+        installer.remove(args.fargs, ui.render)
     end, {
         nargs = "+",
         bar = true,
@@ -119,7 +121,7 @@ function M.setup(opts)
     })
 
     vim.api.nvim_create_user_command("TSUpdate", function(args)
-        installer.update(args.fargs)
+        installer.update(args.fargs, ui.render)
     end, {
         nargs = "+",
         bar = true,
