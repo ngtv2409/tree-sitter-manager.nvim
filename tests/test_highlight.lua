@@ -1,12 +1,9 @@
-local languages = _G.languages or { "tsv", "javascript" }
+local languages = _G.languages or { "tsv", "tsx" }
 
-local T = MiniTest.new_set({
+local T = new_set({
     hooks = {
         pre_once = function()
-            child:setup({ highlight = true })
-        end,
-        post_once = function()
-            child:cleanup()
+            child.setup({ highlight = true })
         end,
     },
     parametrize = parametrize(vim.iter(languages):map(vim.treesitter.language.get_filetypes):flatten():totable()),
@@ -22,7 +19,7 @@ T["after_install"] = MiniTest.new_set({
     hooks = {
         pre_once = function()
             child.lua("installer.install(" .. vim.inspect(languages) .. ")")
-            child:wait(languages)
+            child.wait(languages)
         end,
     },
 })
@@ -41,7 +38,7 @@ T["nohighlight"] = MiniTest.new_set({
     hooks = {
         pre_once = function()
             child.stop()
-            child:setup({ highlight = true, nohighlight = languages })
+            child.setup({ highlight = true, nohighlight = languages })
         end,
     },
 })

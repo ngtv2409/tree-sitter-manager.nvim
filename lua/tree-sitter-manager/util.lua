@@ -62,6 +62,12 @@ function M.is_installed(lang)
     end
 end
 
+---@vararg table lists to be concatenated (out-of-place)
+---@return table concatenated list
+function M.concat(...)
+    return vim.iter({ ... }):flatten():totable()
+end
+
 ---@class Status
 ---@field ok? boolean
 ---@field error? string

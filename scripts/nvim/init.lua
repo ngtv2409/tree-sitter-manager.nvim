@@ -33,6 +33,21 @@ elseif vim.env.LANGUAGES then
     _G.languages = vim.split(vim.env.LANGUAGES, " ")
 end
 
+function new_set(opts, tbl)
+    local _opts = {
+        hooks = {
+            pre_once = function()
+                child.setup()
+            end,
+            post_once = function()
+                child.cleanup()
+            end,
+        },
+    }
+    opts = vim.tbl_deep_extend("force", _opts, opts or {})
+    return MiniTest.new_set(opts, tbl)
+end
+
 function parametrize(list)
     return vim.iter(list)
         :map(function(x)
