@@ -1,8 +1,13 @@
 local config = require("tree-sitter-manager.config")
 local util = require("tree-sitter-manager.util")
 local installer = require("tree-sitter-manager.installer")
+local backport = require("tree-sitter-manager.backport")
 
-local buf
+local title_asci = " Tree-sitter Parser Manager "
+local title_nerd = " 🌳 Tree-sitter Parser Manager "
+local status_asci = { "OK", "!!", ".." }
+local status_nerd = { "✅", "⚠️", "❌" }
+local footer = " [i] Install  [x] Remove  [u] Update  [r] Refresh  [f] Filter  [q] Close "
 local filter_type = {
     --      ok    warn  miss
     [0] = { true, true, true }, --   all
@@ -10,146 +15,146 @@ local filter_type = {
     [2] = { false, true, false }, -- warning
     [3] = { false, false, true }, -- missing
 }
-local filter = 0
-local langs = {}
-local maxlang, maxline = 0, 0
-
-local icon = {
-    title = { "*", "🌳" },
-    status = {
-        { "OK", "✅" }, -- ok
-        { "!!", "⚠️" }, -- warning
-        { "..", "❌" }, -- missing
-    },
-}
-local icon_index = 2
-local title = "Tree-sitter Parser Manager"
-local footer = " [i] Install  [x] Remove  [u] Update  [r] Refresh  [f] Filter  [q] Close "
+local buf, win, langs, filter_idx, title, status_icon, formatter
 
 local M = {}
+
+function M.setup()
+    title = config.cfg.nerdfont and title_nerd or title_asci
+    status_icon = config.cfg.nerdfont and status_nerd or status_asci
+    local langwidth = vim.iter(config.languages):map(string.len):fold(0, math.max)
+    formatter = "   %-" .. langwidth .. "s  %s%s"
+end
 
 local function get_status(lang)
     if not util.is_installed(lang) then
         return 3 -- missing
+    elseif vim.iter(util.get_requires(lang)):all(util.is_installed) then
+        return 1 -- ok
+    else
+        return 2 -- warning
     end
-    for _, dep in ipairs(util.get_requires(lang)) do
-        if not util.is_installed(dep) then
-            return 2 -- warning
-        end
+end
+
+local function get_status_icon_iter(langs)
+    local function get_icon(status)
+        return status_icon[status]
     end
-    return 1 -- ok
+    return vim.iter(langs):map(get_status):map(get_icon)
 end
 
 local function get_meta_suffix(lang)
     local info = util.get_repo_info(lang)
     local parts = {}
     if info and info.revision then
-        table.insert(parts, string.sub(info.revision, 1, 7))
+        local rev = #info.revision == 40 and string.sub(info.revision, 1, 7) or info.revision
+        table.insert(parts, string.format("%-7s", rev))
     end
     local reqs = util.get_requires(lang)
     if #reqs > 0 then
-        table.insert(parts, "requires:" .. table.concat(reqs, ","))
+        vim.list_extend(parts, { "requires:", unpack(reqs) })
     end
     return #parts > 0 and "  " .. table.concat(parts, " ") or ""
 end
 
-local function filter_langs()
-    langs = {}
-    for _, lang in ipairs(config.languages) do
-        maxlang = math.max(maxlang, #lang)
-        if filter_type[filter][get_status(lang)] then
-            langs[#langs + 1] = lang
-        end
-    end
+local function filter(lang)
+    return filter_type[filter_idx][get_status(lang)]
 end
 
-function M.render()
-    local lines = {}
-    maxline = 0
-    for _, lang in ipairs(langs) do
-        local line = string.format("   %-" .. maxlang .. "s  ", lang)
-            .. icon.status[get_status(lang)][icon_index]
-            .. get_meta_suffix(lang)
-        maxline = math.max(maxline, #line)
-        table.insert(lines, line)
+local function get_langs_filtered()
+    return vim.iter(config.languages):filter(filter):totable()
+end
+
+local function cycle_filter()
+    local new_langs
+    repeat -- skip empty results and duplicates
+        filter_idx = (filter_idx + 1) % 4
+        new_langs = get_langs_filtered()
+    until filter_idx == 0 or #new_langs > 0 and not vim.deep_equal(langs, new_langs)
+    langs = new_langs
+    M.render()
+end
+
+local act = setmetatable({}, {
+    __index = function(act, action)
+        local function _action()
+            local lang = vim.api.nvim_get_current_line():match("^%s*([%w_]+)")
+            if lang then
+                installer[action](lang, M.render)
+            end
+        end
+        rawset(act, action, _action)
+        return _action
+    end,
+})
+
+function M.render(out)
+    if not buf then
+        return 0
+    elseif out then -- update langs on callback
+        table.sort(vim.list.unique(vim.list_extend(langs, get_langs_filtered())))
     end
+
+    local status = get_status_icon_iter(langs)
+    local meta = vim.iter(langs):map(get_meta_suffix)
+    local lines = vim.iter(langs)
+        :map(function(lang)
+            return formatter:format(lang, status:next(), meta:next())
+        end)
+        :totable()
+
     vim.bo[buf].modifiable = true
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     vim.bo[buf].modifiable = false
+
+    return vim.iter(lines):map(string.len):fold(0, math.max)
 end
 
-function M.refresh()
-    filter = 0
-    filter_langs()
-    M.render()
-end
-
-function M.render_update(out)
-    if not buf or out and not out.ok then
-        return
-    end
-    local old_langs = langs
-    filter_langs() -- merge with new languages
-    langs = vim.list.unique(util.concat(old_langs, langs))
-    M.render()
+local function close()
+    vim.api.nvim_win_close(win, true)
 end
 
 function M.open()
-    icon_index = config.cfg.nerdfont and 2 or 1
-    buf = buf or vim.api.nvim_create_buf(false, true)
-    M.refresh()
+    langs = config.languages
+    filter_idx = 0
 
-    local w = math.max(#footer + 4, maxline + 4, 40)
-    local h = math.min(#config.languages + 6, vim.o.lines - 15)
-    local win = vim.api.nvim_open_win(buf, true, {
-        relative = "editor",
-        width = w,
-        height = h,
-        style = "minimal",
-        border = config.cfg.border,
-        row = math.floor((vim.o.lines - h) / 2),
-        col = math.floor((vim.o.columns - w) / 2),
-        title = " " .. icon.title[icon_index] .. " " .. title .. " ",
-        title_pos = "center",
-        footer = footer,
-        footer_pos = "center",
-    })
-
-    local close_fn = function()
-        vim.api.nvim_win_close(win, true)
+    if not buf then
+        buf = vim.api.nvim_create_buf(false, true)
+        local opts = { buf = buf, noremap = true, silent = true }
+        vim.keymap.set("n", "q", close, opts)
+        vim.keymap.set("n", "<Esc>", close, opts)
+        vim.keymap.set("n", "r", M.open, opts)
+        vim.keymap.set("n", "i", act.install, opts)
+        vim.keymap.set("n", "x", act.remove, opts)
+        vim.keymap.set("n", "u", act.update, opts)
+        vim.keymap.set("n", "f", cycle_filter, opts)
     end
-    vim.keymap.set("n", "q", close_fn, { buffer = buf, noremap = true, silent = true })
-    vim.keymap.set("n", "<Esc>", close_fn, { buffer = buf, noremap = true, silent = true })
-    vim.keymap.set("n", "r", M.refresh, { buffer = buf, noremap = true, silent = true })
-    vim.keymap.set("n", "i", function()
-        local lang = vim.api.nvim_get_current_line():match("^%s*([%w_]+)")
-        if lang then
-            installer.install(lang, M.render_update)
-        end
-    end, { buffer = buf, noremap = true, silent = true })
-    vim.keymap.set("n", "x", function()
-        local lang = vim.api.nvim_get_current_line():match("^%s*([%w_]+)")
-        if lang then
-            installer.remove(lang)
-            M.render_update()
-        end
-    end, { buffer = buf, noremap = true, silent = true })
-    vim.keymap.set("n", "u", function()
-        local lang = vim.api.nvim_get_current_line():match("^%s*([%w_]+)")
-        if lang then
-            installer.remove(lang)
-            M.render_update()
-            installer.install(lang, M.render_update)
-        end
-    end, { buffer = buf, noremap = true, silent = true })
-    vim.keymap.set("n", "f", function()
-        repeat -- cycle through filter modes skipping empty and duplicate results
-            local old_langs = langs
-            filter = (filter + 1) % 4
-            filter_langs()
-        until #langs > 0 and (filter == 0 or not vim.deep_equal(old_langs, langs))
-        M.render()
-    end, { buffer = buf, noremap = true, silent = true })
+
+    local width = M.render()
+
+    if not win or not vim.api.nvim_win_is_valid(win) then
+        local w = math.max(#footer + 4, width + 3, 40)
+        local h = math.min(#langs + 6, vim.o.lines - 15)
+        win = vim.api.nvim_open_win(buf, true, {
+            relative = "editor",
+            width = w,
+            height = h,
+            style = "minimal",
+            border = config.cfg.border,
+            row = math.floor((vim.o.lines - h) / 2),
+            col = math.floor((vim.o.columns - w) / 2),
+            title = title,
+            title_pos = "center",
+            footer = footer,
+            footer_pos = "center",
+        })
+    end
+end
+
+-- Backward compatibility
+backport.open = M.open
+function backport._act(action)
+    act[action]()
 end
 
 return M

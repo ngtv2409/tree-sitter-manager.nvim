@@ -498,6 +498,12 @@ return {
             url = "https://github.com/airblast-dev/tree-sitter-gdshader",
         },
     },
+    ghostty = {
+        install_info = {
+            revision = "7f41507014534e5f72d16e4639c0346d0adb8054",
+            url = "https://github.com/bezhermoso/tree-sitter-ghostty",
+        },
+    },
     git_config = {
         install_info = {
             revision = "0fbc9f99d5a28865f9de8427fb0672d66f9d83a5",
