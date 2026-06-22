@@ -31,6 +31,7 @@ function M.setup(opts)
     state.languages = vim.tbl_keys(state.effective_repos)
     table.sort(state.languages)
 
+    installer.setup()
     ui.setup()
 
     vim.fn.mkdir(state.cfg.parser_dir, "p")
