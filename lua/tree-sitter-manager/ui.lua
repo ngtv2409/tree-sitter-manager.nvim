@@ -8,7 +8,14 @@ local title_nerd = " 🌳 Tree-sitter Parser Manager "
 local status_asci = { "OK", "!!", ".." }
 local status_nerd = { "✅", "⚠️", "❌" }
 local footer = " [i] Install  [x] Remove  [u] Update  [r] Refresh  [f] Filter  [q] Close "
-local buf, win, langs, title, status_icon, formatter
+local filter_type = {
+    --      ok    warn  miss
+    [0] = { true, true, true }, --   all
+    [1] = { true, true, false }, --  installed
+    [2] = { false, true, false }, -- warning
+    [3] = { false, false, true }, -- missing
+}
+local buf, win, langs, filter_idx, title, status_icon, formatter
 
 local M = {}
 
@@ -50,6 +57,24 @@ local function get_meta_suffix(lang)
     return #parts > 0 and "  " .. table.concat(parts, " ") or ""
 end
 
+local function filter(lang)
+    return filter_type[filter_idx][get_status(lang)]
+end
+
+local function get_langs_filtered()
+    return vim.iter(config.languages):filter(filter):totable()
+end
+
+local function cycle_filter()
+    local new_langs
+    repeat -- skip empty results and duplicates
+        filter_idx = (filter_idx + 1) % 4
+        new_langs = get_langs_filtered()
+    until filter_idx == 0 or #new_langs > 0 and not vim.deep_equal(langs, new_langs)
+    langs = new_langs
+    M.render()
+end
+
 local act = setmetatable({}, {
     __index = function(act, action)
         local function _action()
@@ -64,8 +89,10 @@ local act = setmetatable({}, {
 })
 
 function M.render(out)
-    if not buf or out and not out.ok then
+    if not buf then
         return 0
+    elseif out then -- update langs on callback
+        table.sort(vim.list.unique(vim.list_extend(langs, get_langs_filtered())))
     end
 
     local status = get_status_icon_iter(langs)
@@ -89,15 +116,18 @@ end
 
 function M.open()
     langs = config.languages
+    filter_idx = 0
 
     if not buf then
         buf = vim.api.nvim_create_buf(false, true)
-        vim.keymap.set("n", "q", close, { buf = buf, noremap = true, silent = true })
-        vim.keymap.set("n", "<Esc>", close, { buf = buf, noremap = true, silent = true })
-        vim.keymap.set("n", "r", M.open, { buf = buf, noremap = true, silent = true })
-        vim.keymap.set("n", "i", act.install, { buf = buf, noremap = true, silent = true })
-        vim.keymap.set("n", "x", act.remove, { buf = buf, noremap = true, silent = true })
-        vim.keymap.set("n", "u", act.update, { buf = buf, noremap = true, silent = true })
+        local opts = { buf = buf, noremap = true, silent = true }
+        vim.keymap.set("n", "q", close, opts)
+        vim.keymap.set("n", "<Esc>", close, opts)
+        vim.keymap.set("n", "r", M.open, opts)
+        vim.keymap.set("n", "i", act.install, opts)
+        vim.keymap.set("n", "x", act.remove, opts)
+        vim.keymap.set("n", "u", act.update, opts)
+        vim.keymap.set("n", "f", cycle_filter, opts)
     end
 
     local width = M.render()
