@@ -67,6 +67,13 @@ T["no_branch_no_rev"] = function()
     child.wait(languages, 180000)
 end
 
+T["GIT_WORK_TREE"] = function()
+    local languages = _G.languages or { "tsv" }
+    child.cmd("let $GIT_WORK_TREE = '.'")
+    child.lua("installer.install(" .. vim.inspect(languages) .. ")")
+    child.wait(languages)
+end
+
 T["pre_2.49.0"] = MiniTest.new_set({
     hooks = {
         pre_once = function()
@@ -93,9 +100,15 @@ T["pre_2.49.0"] = MiniTest.new_set({
         end,
     },
 })
+-- check installation with revision pre 2.49
 T["pre_2.49.0"]["revision"] = function()
-    -- check installation with revision pre 2.49
     local languages = _G.languages or { "tsv" }
+    child.lua("installer.install(" .. vim.inspect(languages) .. ")")
+    child.wait(languages)
+end
+T["pre_2.49.0"]["GIT_WORK_TREE"] = function()
+    local languages = _G.languages or { "tsv" }
+    child.cmd("let $GIT_WORK_TREE = '.'")
     child.lua("installer.install(" .. vim.inspect(languages) .. ")")
     child.wait(languages)
 end

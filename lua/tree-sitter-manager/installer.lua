@@ -34,9 +34,7 @@ local function treesitter_build(lang, query_dir, build_path, generate, tmpdir, s
         vim.notify(notify_icon[6] .. "Generating " .. lang)
     end
     util.run_async({ "tree-sitter", "generate" }, build_path, _status, function(out)
-        if not generate then
-            out = status
-        end
+        out = generate and out or status
         if out.ok then
             vim.notify(notify_icon[7] .. "Building " .. lang)
         end
@@ -69,16 +67,17 @@ local function install(lang, callback)
     local info = util.get_repo_info(lang)
     local tmpdir = vim.fn.tempname()
     local build_path = vim.fs.joinpath(tmpdir, info.location)
+    local git_args = { "git", "--no-advice", "--work-tree=" .. tmpdir }
 
     if info.revision and (major < 2 or major == 2 and minor < 49) then
         -- Git pre 2.49.0 doesn't have --revision flag
         out = util.run({ "git", "init", tmpdir })
         if out.ok then
-            out = util.run({ "git", "remote", "add", "origin", info.url }, tmpdir)
+            out = util.run(util.concat(git_args, { "remote", "add", "origin", info.url }))
         end
-        util.run_async({ "git", "fetch", "--depth=1", "origin", info.revision }, tmpdir, out, function(out)
+        util.run_async(util.concat(git_args, { "fetch", "--depth=1", "origin", info.revision }), nil, out, function(out)
             if out.ok then
-                out = util.run({ "git", "checkout", "FETCH_HEAD" }, tmpdir)
+                out = util.run(util.concat(git_args, { "checkout", "FETCH_HEAD" }))
             end
             treesitter_build(
                 lang,
@@ -94,7 +93,7 @@ local function install(lang, callback)
         local revision = info.revision and "--revision=" .. info.revision
         local branch = info.branch and "--branch=" .. info.branch
         util.run_async(
-            { "git", "--no-advice", "clone", "--depth=1", info.url, tmpdir, revision or branch },
+            util.concat(git_args, { "clone", "--depth=1", info.url, tmpdir, revision or branch }),
             nil,
             out,
             function(out)
