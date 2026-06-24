@@ -16,21 +16,19 @@ local filter_type = {
     [3] = { false, false, true }, -- missing
 }
 
-local frames_nerd = { "⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ " }
-local frames_asci = { "- ", "\\ ", "| ", "/ " }
+local frames = { "⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ " }
 
 local ns = vim.api.nvim_create_namespace("tree-sitter-manager.spinner")
 local spinning = {} -- table<lang, { timer, mark_id, row, frame }>
 
 local buf, win, langs, filter_idx, title, status_icon, formatter
-local langwidth, icon_col, frames
+local langwidth, icon_col
 
 local M = {}
 
 function M.setup()
     title = config.cfg.nerdfont and title_nerd or title_asci
     status_icon = config.cfg.nerdfont and status_nerd or status_asci
-    frames = config.cfg.nerdfont and frames_nerd or frames_asci
     langwidth = vim.iter(config.languages):map(string.len):fold(0, math.max)
     icon_col = langwidth + 5 -- 3 leading spaces + langwidth chars + 2 separator spaces
     formatter = "   %-" .. langwidth .. "s  %s%s"
