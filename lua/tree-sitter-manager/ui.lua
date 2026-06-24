@@ -15,14 +15,24 @@ local filter_type = {
     [2] = { false, true, false }, -- warning
     [3] = { false, false, true }, -- missing
 }
+
+local frames_nerd = { "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷" }
+local frames_asci = { "-", "\\", "|", "/" }
+
+local ns = vim.api.nvim_create_namespace("tree-sitter-manager.spinner")
+local spinning = {} -- table<lang, { timer, mark_id, row, frame }>
+
 local buf, win, langs, filter_idx, title, status_icon, formatter
+local langwidth, ICON_COL, frames
 
 local M = {}
 
 function M.setup()
     title = config.cfg.nerdfont and title_nerd or title_asci
     status_icon = config.cfg.nerdfont and status_nerd or status_asci
-    local langwidth = vim.iter(config.languages):map(string.len):fold(0, math.max)
+    frames = config.cfg.nerdfont and frames_nerd or frames_asci
+    langwidth = vim.iter(config.languages):map(string.len):fold(0, math.max)
+    ICON_COL = langwidth + 5 -- 3 leading spaces + langwidth chars + 2 separator spaces
     formatter = "   %-" .. langwidth .. "s  %s%s"
 end
 
@@ -75,12 +85,117 @@ local function cycle_filter()
     M.render()
 end
 
+local function lang_row(lang)
+    for i, l in ipairs(langs) do
+        if l == lang then
+            return i - 1
+        end
+    end
+end
+
+local function start_spinner(lang, row)
+    if spinning[lang] then
+        return
+    end
+
+    local f = 1
+    local mid = vim.api.nvim_buf_set_extmark(buf, ns, row, ICON_COL, {
+        virt_text = { { frames[f] .. " ", "Special" } },
+        virt_text_pos = "overlay",
+    })
+
+    local timer = vim.uv.new_timer()
+    timer:start(
+        0,
+        80,
+        vim.schedule_wrap(function()
+            local s = spinning[lang]
+            if not s then
+                if not timer:is_closing() then
+                    timer:stop()
+                    timer:close()
+                end
+                return
+            end
+
+            if not vim.api.nvim_buf_is_valid(buf) then
+                if not timer:is_closing() then
+                    timer:stop()
+                    timer:close()
+                end
+                spinning[lang] = nil
+                return
+            end
+
+            f = (f % #frames) + 1
+            s.frame = f
+            vim.api.nvim_buf_set_extmark(buf, ns, s.row, ICON_COL, {
+                id = mid,
+                virt_text = { { frames[f] .. " ", "Special" } },
+                virt_text_pos = "overlay",
+            })
+        end)
+    )
+    spinning[lang] = { timer = timer, mark_id = mid, row = row, frame = f }
+end
+
+local function stop_spinner(lang)
+    local s = spinning[lang]
+    if not s then
+        return
+    end
+
+    if not s.timer:is_closing() then
+        s.timer:stop()
+        s.timer:close()
+    end
+
+    if vim.api.nvim_buf_is_valid(buf) then
+        vim.api.nvim_buf_del_extmark(buf, ns, s.mark_id)
+    end
+    spinning[lang] = nil
+end
+
+-- After any buffer rewrite, re-anchor active spinner extmarks to their current
+-- rows. Handles row drift when M.render(out) sorts new langs into the list, or
+-- when M.open resets langs to config.languages.
+local function sync_spinners()
+    for lang, s in pairs(spinning) do
+        local row = lang_row(lang)
+        if row then
+            s.row = row
+            vim.api.nvim_buf_set_extmark(buf, ns, row, ICON_COL, {
+                id = s.mark_id,
+                virt_text = { { frames[s.frame] .. " ", "Special" } },
+                virt_text_pos = "overlay",
+            })
+        end
+    end
+end
+
 local act = setmetatable({}, {
     __index = function(act, action)
         local function _action()
             local lang = vim.api.nvim_get_current_line():match("^%s*([%w_]+)")
             if lang then
-                installer[action](lang, M.render)
+                local function on_done(out)
+                    for l in pairs(spinning) do
+                        if not installer.installing[l] then
+                            stop_spinner(l)
+                        end
+                    end
+                    M.render(out)
+                end
+                installer[action](lang, on_done)
+                -- installer.install expands deps in-place before returning, so
+                -- installer.installing now contains the target lang and all its
+                -- required deps that were actually kicked off as async jobs.
+                for l in pairs(installer.installing) do
+                    local row = lang_row(l)
+                    if row then
+                        start_spinner(l, row)
+                    end
+                end
             end
         end
         rawset(act, action, _action)
@@ -106,6 +221,8 @@ function M.render(out)
     vim.bo[buf].modifiable = true
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     vim.bo[buf].modifiable = false
+
+    sync_spinners()
 
     return vim.iter(lines):map(string.len):fold(0, math.max)
 end
