@@ -16,14 +16,14 @@ local filter_type = {
     [3] = { false, false, true }, -- missing
 }
 
-local frames_nerd = { "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷" }
-local frames_asci = { "-", "\\", "|", "/" }
+local frames_nerd = { "⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ " }
+local frames_asci = { "- ", "\\ ", "| ", "/ " }
 
 local ns = vim.api.nvim_create_namespace("tree-sitter-manager.spinner")
 local spinning = {} -- table<lang, { timer, mark_id, row, frame }>
 
 local buf, win, langs, filter_idx, title, status_icon, formatter
-local langwidth, ICON_COL, frames
+local langwidth, icon_col, frames
 
 local M = {}
 
@@ -32,7 +32,7 @@ function M.setup()
     status_icon = config.cfg.nerdfont and status_nerd or status_asci
     frames = config.cfg.nerdfont and frames_nerd or frames_asci
     langwidth = vim.iter(config.languages):map(string.len):fold(0, math.max)
-    ICON_COL = langwidth + 5 -- 3 leading spaces + langwidth chars + 2 separator spaces
+    icon_col = langwidth + 5 -- 3 leading spaces + langwidth chars + 2 separator spaces
     formatter = "   %-" .. langwidth .. "s  %s%s"
 end
 
@@ -99,8 +99,8 @@ local function start_spinner(lang, row)
     end
 
     local f = 1
-    local mid = vim.api.nvim_buf_set_extmark(buf, ns, row, ICON_COL, {
-        virt_text = { { frames[f] .. " ", "Special" } },
+    local mid = vim.api.nvim_buf_set_extmark(buf, ns, row, icon_col, {
+        virt_text = { { frames[f], "Special" } },
         virt_text_pos = "overlay",
     })
 
@@ -129,7 +129,7 @@ local function start_spinner(lang, row)
 
             f = (f % #frames) + 1
             s.frame = f
-            vim.api.nvim_buf_set_extmark(buf, ns, s.row, ICON_COL, {
+            vim.api.nvim_buf_set_extmark(buf, ns, s.row, icon_col, {
                 id = mid,
                 virt_text = { { frames[f] .. " ", "Special" } },
                 virt_text_pos = "overlay",
@@ -164,7 +164,7 @@ local function sync_spinners()
         local row = lang_row(lang)
         if row then
             s.row = row
-            vim.api.nvim_buf_set_extmark(buf, ns, row, ICON_COL, {
+            vim.api.nvim_buf_set_extmark(buf, ns, row, icon_col, {
                 id = s.mark_id,
                 virt_text = { { frames[s.frame] .. " ", "Special" } },
                 virt_text_pos = "overlay",
@@ -187,9 +187,7 @@ local act = setmetatable({}, {
                     M.render(out)
                 end
                 installer[action](lang, on_done)
-                -- installer.install expands deps in-place before returning, so
-                -- installer.installing now contains the target lang and all its
-                -- required deps that were actually kicked off as async jobs.
+
                 for l in pairs(installer.installing) do
                     local row = lang_row(l)
                     if row then
