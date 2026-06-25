@@ -168,14 +168,14 @@ local function sync_spinners()
             s.row = row
             vim.api.nvim_buf_set_extmark(buf, ns, row, icon_col, {
                 id = s.mark_id,
-                virt_text = { { frames[s.frame] .. " ", "Special" } },
+                virt_text = { { frames[s.frame], "Special" } },
                 virt_text_pos = "overlay",
             })
         elseif row and not s.mark_id then
             -- Lang was hidden but is visible again: create a fresh extmark.
             s.row = row
             s.mark_id = vim.api.nvim_buf_set_extmark(buf, ns, row, icon_col, {
-                virt_text = { { frames[s.frame] .. " ", "Special" } },
+                virt_text = { { frames[s.frame], "Special" } },
                 virt_text_pos = "overlay",
             })
         elseif not row and s.mark_id then
