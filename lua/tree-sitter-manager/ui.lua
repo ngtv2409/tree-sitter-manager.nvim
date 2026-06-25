@@ -19,7 +19,8 @@ local filter_type = {
 local frames = { "⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ " }
 
 local ns = vim.api.nvim_create_namespace("tree-sitter-manager.spinner")
-local spinning = {} -- table<lang, { timer, mark_id, row, frame }>
+local spinning = {} -- table<lang, { mark_id, row, frame }>
+local timer = nil
 
 local buf, win, langs, filter_idx, title, status_icon, formatter
 local langwidth, icon_col
@@ -91,52 +92,47 @@ local function lang_row(lang)
     end
 end
 
+local function tick()
+    if not vim.api.nvim_buf_is_valid(buf) then
+        -- Buffer gone: kill the timer and wipe all spinner state.
+        for lang in pairs(spinning) do
+            spinning[lang] = nil
+        end
+        if timer and not timer:is_closing() then
+            timer:stop()
+            timer:close()
+        end
+        timer = nil
+        return
+    end
+
+    for _, s in pairs(spinning) do
+        s.frame = (s.frame % #frames) + 1
+        if s.mark_id then
+            vim.api.nvim_buf_set_extmark(buf, ns, s.row, icon_col, {
+                id = s.mark_id,
+                virt_text = { { frames[s.frame], "Special" } },
+                virt_text_pos = "overlay",
+            })
+        end
+    end
+end
+
 local function start_spinner(lang, row)
     if spinning[lang] then
         return
     end
 
-    local f = 1
     local mid = vim.api.nvim_buf_set_extmark(buf, ns, row, icon_col, {
-        virt_text = { { frames[f], "Special" } },
+        virt_text = { { frames[1], "Special" } },
         virt_text_pos = "overlay",
     })
+    spinning[lang] = { mark_id = mid, row = row, frame = 1 }
 
-    local timer = vim.uv.new_timer()
-    timer:start(
-        0,
-        80,
-        vim.schedule_wrap(function()
-            local s = spinning[lang]
-            if not s then
-                if not timer:is_closing() then
-                    timer:stop()
-                    timer:close()
-                end
-                return
-            end
-
-            if not vim.api.nvim_buf_is_valid(buf) then
-                if not timer:is_closing() then
-                    timer:stop()
-                    timer:close()
-                end
-                spinning[lang] = nil
-                return
-            end
-
-            f = (f % #frames) + 1
-            s.frame = f
-            if s.mark_id then
-                vim.api.nvim_buf_set_extmark(buf, ns, s.row, icon_col, {
-                    id = mid,
-                    virt_text = { { frames[f], "Special" } },
-                    virt_text_pos = "overlay",
-                })
-            end
-        end)
-    )
-    spinning[lang] = { timer = timer, mark_id = mid, row = row, frame = f }
+    if not timer then
+        timer = vim.uv.new_timer()
+        timer:start(80, 80, vim.schedule_wrap(tick))
+    end
 end
 
 local function stop_spinner(lang)
@@ -145,15 +141,18 @@ local function stop_spinner(lang)
         return
     end
 
-    if not s.timer:is_closing() then
-        s.timer:stop()
-        s.timer:close()
-    end
-
     if vim.api.nvim_buf_is_valid(buf) and s.mark_id then
         vim.api.nvim_buf_del_extmark(buf, ns, s.mark_id)
     end
     spinning[lang] = nil
+
+    if not next(spinning) and timer then
+        if not timer:is_closing() then
+            timer:stop()
+            timer:close()
+        end
+        timer = nil
+    end
 end
 
 -- After any buffer rewrite, re-anchor active spinner extmarks to their current
