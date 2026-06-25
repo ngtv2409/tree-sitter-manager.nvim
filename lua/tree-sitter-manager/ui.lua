@@ -16,11 +16,11 @@ local icon_col
 local footer = " [i] Install  [x] Remove  [u] Update  [r] Refresh  [f] Filter  [q] Close "
 
 local filter_type = {
-    --      ok    warn  miss  installing
-    [0] = { true, true, true, true }, --   all
-    [1] = { true, true, false, true }, --  installed
-    [2] = { false, true, false, true }, -- warning
-    [3] = { false, false, true, false }, -- missing
+    --ok    warn  miss  installing
+    { true, true, true, true }, --    all
+    { true, true, false, true }, --   installed
+    { false, true, false, true }, --  warning
+    { false, false, true, false }, -- missing
 }
 local filter_idx
 
@@ -82,9 +82,9 @@ end
 local function cycle_filter()
     local new_langs
     repeat -- skip empty results and duplicates
-        filter_idx = (filter_idx + 1) % 4
+        filter_idx = (filter_idx % 4) + 1
         new_langs = get_langs_filtered()
-    until filter_idx == 0 or #new_langs > 0 and not vim.deep_equal(langs, new_langs)
+    until filter_idx == 1 or #new_langs > 0 and not vim.deep_equal(langs, new_langs)
     langs = new_langs
     M.render()
 end
@@ -149,8 +149,8 @@ end
 
 function M.open()
     langs = config.languages
-    filter_idx = 0
-    frame_idx = 0
+    filter_idx = 1
+    frame_idx = 1
 
     if not buf or not vim.api.nvim_buf_is_valid(buf) then
         buf = vim.api.nvim_create_buf(false, true)
