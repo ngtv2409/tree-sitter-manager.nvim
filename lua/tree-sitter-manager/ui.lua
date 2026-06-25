@@ -2,41 +2,47 @@ local config = require("tree-sitter-manager.config")
 local util = require("tree-sitter-manager.util")
 local installer = require("tree-sitter-manager.installer")
 local backport = require("tree-sitter-manager.backport")
+local ns = vim.api.nvim_create_namespace("tree-sitter-manager.spinner")
 
 local title_asci = " Tree-sitter Parser Manager "
 local title_nerd = " 🌳 Tree-sitter Parser Manager "
-local status_asci = { "OK", "!!", ".." }
-local status_nerd = { "✅", "⚠️", "❌" }
+local title
+
+local status_asci = { "OK", "!!", "..", "  " }
+local status_nerd = { "✅", "⚠️", "❌", "  " }
+local status_icon
+local icon_col
+
 local footer = " [i] Install  [x] Remove  [u] Update  [r] Refresh  [f] Filter  [q] Close "
+
 local filter_type = {
-    --      ok    warn  miss
-    [0] = { true, true, true }, --   all
-    [1] = { true, true, false }, --  installed
-    [2] = { false, true, false }, -- warning
-    [3] = { false, false, true }, -- missing
+    --      ok    warn  miss  installing
+    [0] = { true, true, true, true }, --   all
+    [1] = { true, true, false, true }, --  installed
+    [2] = { false, true, false, true }, -- warning
+    [3] = { false, false, true, false }, -- missing
 }
+local filter_idx
 
 local frames = { "⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ " }
+local frame_idx
 
-local ns = vim.api.nvim_create_namespace("tree-sitter-manager.spinner")
-local spinning = {} -- table<lang, { mark_id, row, frame }>
-local timer = nil
-
-local buf, win, langs, filter_idx, title, status_icon, formatter
-local langwidth, icon_col
+local buf, win, langs, formatter, spinner
 
 local M = {}
 
 function M.setup()
     title = config.cfg.nerdfont and title_nerd or title_asci
     status_icon = config.cfg.nerdfont and status_nerd or status_asci
-    langwidth = vim.iter(config.languages):map(string.len):fold(0, math.max)
-    icon_col = langwidth + 5 -- 3 leading spaces + langwidth chars + 2 separator spaces
+    local langwidth = vim.iter(config.languages):map(string.len):fold(0, math.max)
     formatter = "   %-" .. langwidth .. "s  %s%s"
+    icon_col = 3 + langwidth + 2
 end
 
 local function get_status(lang)
-    if not util.is_installed(lang) then
+    if installer.installing[lang] then
+        return 4 -- installing
+    elseif not util.is_installed(lang) then
         return 3 -- missing
     elseif vim.iter(util.get_requires(lang)):all(util.is_installed) then
         return 1 -- ok
@@ -66,11 +72,10 @@ local function get_meta_suffix(lang)
     return #parts > 0 and "  " .. table.concat(parts, " ") or ""
 end
 
-local function filter(lang)
-    return filter_type[filter_idx][get_status(lang)]
-end
-
 local function get_langs_filtered()
+    local function filter(lang)
+        return filter_type[filter_idx][get_status(lang)]
+    end
     return vim.iter(config.languages):filter(filter):totable()
 end
 
@@ -84,105 +89,19 @@ local function cycle_filter()
     M.render()
 end
 
-local function lang_row(lang)
-    for i, l in ipairs(langs) do
-        if l == lang then
-            return i - 1
-        end
-    end
-end
-
-local function tick()
-    if not vim.api.nvim_buf_is_valid(buf) then
-        -- Buffer gone: kill the timer and wipe all spinner state.
-        for lang in pairs(spinning) do
-            spinning[lang] = nil
-        end
-        if timer and not timer:is_closing() then
-            timer:stop()
-            timer:close()
-        end
-        timer = nil
+local function render_spinner()
+    if not buf or not vim.api.nvim_buf_is_valid(buf) then
         return
     end
 
-    for _, s in pairs(spinning) do
-        s.frame = (s.frame % #frames) + 1
-        if s.mark_id then
-            vim.api.nvim_buf_set_extmark(buf, ns, s.row, icon_col, {
-                id = s.mark_id,
-                virt_text = { { frames[s.frame], "Special" } },
+    vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+    for row, lang in ipairs(langs) do
+        if installer.installing[lang] then
+            vim.api.nvim_buf_set_extmark(buf, ns, row - 1, icon_col, {
+                virt_text = { { frames[frame_idx], "Special" } },
                 virt_text_pos = "overlay",
             })
         end
-    end
-end
-
-local function start_spinner(lang, row)
-    if spinning[lang] then
-        return
-    end
-
-    local mid = vim.api.nvim_buf_set_extmark(buf, ns, row, icon_col, {
-        virt_text = { { frames[1], "Special" } },
-        virt_text_pos = "overlay",
-    })
-    spinning[lang] = { mark_id = mid, row = row, frame = 1 }
-
-    if not timer then
-        timer = vim.uv.new_timer()
-        timer:start(80, 80, vim.schedule_wrap(tick))
-    end
-end
-
-local function stop_spinner(lang)
-    local s = spinning[lang]
-    if not s then
-        return
-    end
-
-    if vim.api.nvim_buf_is_valid(buf) and s.mark_id then
-        vim.api.nvim_buf_del_extmark(buf, ns, s.mark_id)
-    end
-    spinning[lang] = nil
-
-    if not next(spinning) and timer then
-        if not timer:is_closing() then
-            timer:stop()
-            timer:close()
-        end
-        timer = nil
-    end
-end
-
--- After any buffer rewrite, re-anchor active spinner extmarks to their current
--- rows. Handles row drift when M.render(out) sorts new langs into the list, or
--- when M.open resets langs to config.languages, or when a filter change hides
--- or reveals a spinning lang.
-local function sync_spinners()
-    for lang, s in pairs(spinning) do
-        local row = lang_row(lang)
-        if row and s.mark_id then
-            -- Lang still visible: reposition the existing extmark.
-            s.row = row
-            vim.api.nvim_buf_set_extmark(buf, ns, row, icon_col, {
-                id = s.mark_id,
-                virt_text = { { frames[s.frame], "Special" } },
-                virt_text_pos = "overlay",
-            })
-        elseif row and not s.mark_id then
-            -- Lang was hidden but is visible again: create a fresh extmark.
-            s.row = row
-            s.mark_id = vim.api.nvim_buf_set_extmark(buf, ns, row, icon_col, {
-                virt_text = { { frames[s.frame], "Special" } },
-                virt_text_pos = "overlay",
-            })
-        elseif not row and s.mark_id then
-            -- Lang just became hidden by the filter: delete the orphaned extmark.
-            vim.api.nvim_buf_del_extmark(buf, ns, s.mark_id)
-            s.mark_id = nil
-        end
-        -- not row and not s.mark_id: still hidden, nothing to do.
     end
 end
 
@@ -191,22 +110,8 @@ local act = setmetatable({}, {
         local function _action()
             local lang = vim.api.nvim_get_current_line():match("^%s*([%w_]+)")
             if lang then
-                local function on_done(out)
-                    for l in pairs(spinning) do
-                        if not installer.installing[l] then
-                            stop_spinner(l)
-                        end
-                    end
-                    M.render(out)
-                end
-                installer[action](lang, on_done)
-
-                for l in pairs(installer.installing) do
-                    local row = lang_row(l)
-                    if row then
-                        start_spinner(l, row)
-                    end
-                end
+                installer[action](lang, M.render)
+                M.render(true)
             end
         end
         rawset(act, action, _action)
@@ -215,7 +120,7 @@ local act = setmetatable({}, {
 })
 
 function M.render(out)
-    if not buf then
+    if not buf or not vim.api.nvim_buf_is_valid(buf) then
         return 0
     elseif out then -- update langs on callback
         table.sort(vim.list.unique(vim.list_extend(langs, get_langs_filtered())))
@@ -232,21 +137,22 @@ function M.render(out)
     vim.bo[buf].modifiable = true
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     vim.bo[buf].modifiable = false
-
-    sync_spinners()
+    render_spinner()
 
     return vim.iter(lines):map(string.len):fold(0, math.max)
 end
 
 local function close()
+    spinner:stop()
     vim.api.nvim_win_close(win, true)
 end
 
 function M.open()
     langs = config.languages
     filter_idx = 0
+    frame_idx = 0
 
-    if not buf then
+    if not buf or not vim.api.nvim_buf_is_valid(buf) then
         buf = vim.api.nvim_create_buf(false, true)
         local opts = { buf = buf, noremap = true, silent = true }
         vim.keymap.set("n", "q", close, opts)
@@ -277,6 +183,19 @@ function M.open()
             footer_pos = "center",
         })
     end
+
+    if not spinner then
+        spinner = vim.uv.new_timer()
+    end
+
+    spinner:start(
+        0,
+        80,
+        vim.schedule_wrap(function()
+            frame_idx = (frame_idx % #frames) + 1
+            render_spinner()
+        end)
+    )
 end
 
 -- Backward compatibility
