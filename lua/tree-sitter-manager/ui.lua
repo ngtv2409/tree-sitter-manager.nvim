@@ -127,11 +127,13 @@ local function start_spinner(lang, row)
 
             f = (f % #frames) + 1
             s.frame = f
-            vim.api.nvim_buf_set_extmark(buf, ns, s.row, icon_col, {
-                id = mid,
-                virt_text = { { frames[f] .. " ", "Special" } },
-                virt_text_pos = "overlay",
-            })
+            if s.mark_id then
+                vim.api.nvim_buf_set_extmark(buf, ns, s.row, icon_col, {
+                    id = mid,
+                    virt_text = { { frames[f], "Special" } },
+                    virt_text_pos = "overlay",
+                })
+            end
         end)
     )
     spinning[lang] = { timer = timer, mark_id = mid, row = row, frame = f }
@@ -148,7 +150,7 @@ local function stop_spinner(lang)
         s.timer:close()
     end
 
-    if vim.api.nvim_buf_is_valid(buf) then
+    if vim.api.nvim_buf_is_valid(buf) and s.mark_id then
         vim.api.nvim_buf_del_extmark(buf, ns, s.mark_id)
     end
     spinning[lang] = nil
@@ -156,18 +158,32 @@ end
 
 -- After any buffer rewrite, re-anchor active spinner extmarks to their current
 -- rows. Handles row drift when M.render(out) sorts new langs into the list, or
--- when M.open resets langs to config.languages.
+-- when M.open resets langs to config.languages, or when a filter change hides
+-- or reveals a spinning lang.
 local function sync_spinners()
     for lang, s in pairs(spinning) do
         local row = lang_row(lang)
-        if row then
+        if row and s.mark_id then
+            -- Lang still visible: reposition the existing extmark.
             s.row = row
             vim.api.nvim_buf_set_extmark(buf, ns, row, icon_col, {
                 id = s.mark_id,
                 virt_text = { { frames[s.frame] .. " ", "Special" } },
                 virt_text_pos = "overlay",
             })
+        elseif row and not s.mark_id then
+            -- Lang was hidden but is visible again: create a fresh extmark.
+            s.row = row
+            s.mark_id = vim.api.nvim_buf_set_extmark(buf, ns, row, icon_col, {
+                virt_text = { { frames[s.frame] .. " ", "Special" } },
+                virt_text_pos = "overlay",
+            })
+        elseif not row and s.mark_id then
+            -- Lang just became hidden by the filter: delete the orphaned extmark.
+            vim.api.nvim_buf_del_extmark(buf, ns, s.mark_id)
+            s.mark_id = nil
         end
+        -- not row and not s.mark_id: still hidden, nothing to do.
     end
 end
 
