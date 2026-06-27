@@ -231,9 +231,11 @@ nerdfont ~
     :TSUninstall cpp java
 <
                                                                  *:TSUpdate*
-:TSUpdate {lang} ...
+:TSUpdate [{lang}] ...
+:TSUpdate!
   Update parsers. >vim
     :TSUpdate rust zsh
+    :TSUpdate! "force update all
 <
 
 ==============================================================================
