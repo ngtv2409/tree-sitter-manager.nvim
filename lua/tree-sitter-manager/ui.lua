@@ -44,7 +44,7 @@ local function get_status(lang)
         return 4 -- installing
     elseif not util.is_installed(lang) then
         return 3 -- missing
-    elseif vim.iter(util.get_requires(lang)):all(util.is_installed) then
+    elseif vim.iter(util.get_requires(lang)):all(function(l) return get_status(l) == 1 end) then
         return 1 -- ok
     else
         return 2 -- warning
