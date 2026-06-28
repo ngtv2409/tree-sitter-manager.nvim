@@ -27,7 +27,7 @@ local filter_idx
 local frames = { "⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ " }
 local frame_idx
 
-local buf, win, langs, formatter, spinner
+local buf, win, langs, formatter, spinner, content_width
 
 local M = {}
 
@@ -139,12 +139,36 @@ function M.render(out)
     vim.bo[buf].modifiable = false
     render_spinner()
 
-    return vim.iter(lines):map(string.len):fold(0, math.max)
+    content_width = vim.iter(lines):map(string.len):fold(0, math.max)
 end
 
 local function close()
     spinner:stop()
     vim.api.nvim_win_close(win, true)
+end
+
+local function get_dims()
+    local w = math.max(#footer + 4, content_width + 3, 40)
+    local h = math.min(#langs + 6, vim.o.lines - 15)
+    local r = math.floor((vim.o.lines - h) / 2)
+    local c = math.floor((vim.o.columns - w) / 2)
+
+    return w, h, r, c
+end
+
+local function resize()
+    if not win or not vim.api.nvim_win_is_valid(win) then
+        return
+    end
+
+    local w, h, r, c = get_dims()
+    vim.api.nvim_win_set_config(win, {
+        relative = "editor",
+        width = w,
+        height = h,
+        row = r,
+        col = c,
+    })
 end
 
 function M.open()
@@ -162,21 +186,25 @@ function M.open()
         vim.keymap.set("n", "x", act.remove, opts)
         vim.keymap.set("n", "u", act.update, opts)
         vim.keymap.set("n", "f", cycle_filter, opts)
+
+        vim.api.nvim_create_autocmd("VimResized", {
+            group = vim.api.nvim_create_augroup("tree-sitter-manager.ui", {}),
+            callback = resize,
+        })
     end
 
-    local width = M.render()
+    M.render()
 
     if not win or not vim.api.nvim_win_is_valid(win) then
-        local w = math.max(#footer + 4, width + 3, 40)
-        local h = math.min(#langs + 6, vim.o.lines - 15)
+        local w, h, r, c = get_dims()
         win = vim.api.nvim_open_win(buf, true, {
             relative = "editor",
             width = w,
             height = h,
             style = "minimal",
             border = config.cfg.border,
-            row = math.floor((vim.o.lines - h) / 2),
-            col = math.floor((vim.o.columns - w) / 2),
+            row = r,
+            col = c,
             title = title,
             title_pos = "center",
             footer = footer,
