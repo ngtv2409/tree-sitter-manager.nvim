@@ -124,9 +124,10 @@ function M.install(languages, callback, update)
     languages = type(languages) == "string" and { languages } or languages
     callback = callback or function() end
 
-    for _, lang in ipairs(languages) do
-        vim.list.unique(vim.list_extend(languages, util.get_requires(lang)))
+    for _, lang in ipairs({ unpack(languages) }) do
+        vim.list_extend(languages, util.get_requires(lang))
     end
+    vim.list.unique(languages)
 
     local installing = {}
     for _, lang in ipairs(languages) do
