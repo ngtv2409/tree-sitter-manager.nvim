@@ -44,6 +44,8 @@ local function get_status(lang)
         return 4 -- installing
     elseif not util.is_installed(lang) then
         return 3 -- missing
+    elseif vim.list_contains(config.cfg.assume_installed, lang) then
+        return 1 -- ok
     elseif vim.iter(util.get_requires(lang)):all(util.is_installed) then
         return 1 -- ok
     else
@@ -148,10 +150,10 @@ local function close()
 end
 
 local function get_dims()
-    local w = math.max(#footer + 4, content_width + 3, 40)
-    local h = math.min(#langs + 6, vim.o.lines - 15)
-    local r = math.floor((vim.o.lines - h) / 2)
-    local c = math.floor((vim.o.columns - w) / 2)
+    local w = math.max(config.cfg.min_width, #footer + 4, content_width + 3)
+    local h = math.max(config.cfg.min_height, vim.o.lines - 15)
+    local r = math.floor((vim.o.lines - h) / 2 - 1)
+    local c = math.floor((vim.o.columns - w) / 2 - 1)
 
     return w, h, r, c
 end

@@ -125,7 +125,9 @@ function M.install(languages, callback, update)
     callback = callback or function() end
 
     for _, lang in ipairs({ unpack(languages) }) do
-        vim.list_extend(languages, util.get_requires(lang))
+        if not vim.list_contains(config.cfg.assume_installed, lang) then
+            vim.list_extend(languages, util.get_requires(lang))
+        end
     end
     vim.list.unique(languages)
 

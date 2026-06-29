@@ -29,26 +29,20 @@ function M.cleanup()
 end
 
 function M.wait(languages, timeout)
-    if type(languages) == "string" then
-        languages = { languages }
-    end
+    languages = type(languages) == "string" and { languages } or languages
     timeout = timeout or 60000
     M.lua([[
-    languages = ]] .. vim.inspect(languages) .. [[
     success, reason = vim.wait(
         ]] .. timeout .. [[,
         function()
-            languages = vim.tbl_filter(function(lang)
-                return installer.installing[lang]
-            end, languages)
-            return #languages == 0
+            return not next(installer.installing)
         end,
         50
     )
     ]])
     local success = M.lua_get("success")
     local reason = M.lua_get("reason")
-    local langs = M.lua_get("languages")
+    local langs = M.lua_get("vim.tbl_keys(installer.installing)")
     local status = M.lua_get("installer.status")
     if not success then
         if -1 == reason then
@@ -74,15 +68,15 @@ function M.wait(languages, timeout)
 end
 
 function M.works(languages, query)
-    if type(languages) == "string" then
-        languages = { languages }
-    end
+    languages = type(languages) == "string" and { languages } or languages
     query = query or "highlights"
     for _, lang in ipairs(languages) do
-        ner(function()
-            M.lua("vim.treesitter.get_string_parser('', '" .. lang .. "')")
-        end)
-        eq(true, M.lua_get("nil ~= vim.treesitter.query.get('" .. lang .. "', '" .. query .. "')"))
+        if not util.is_only_query(lang) then
+            ner(function()
+                M.lua("vim.treesitter.get_string_parser('', '" .. lang .. "')")
+            end)
+            eq(true, M.lua_get("nil ~= vim.treesitter.query.get('" .. lang .. "', '" .. query .. "')"))
+        end
     end
 end
 
